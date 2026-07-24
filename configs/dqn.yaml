@@ -1,0 +1,120 @@
+# DQN Configuration
+# Schmidhuber's Curious Model-Building Control System
+
+# Environment settings
+environment:
+  grid_size: 10  # 10x10 grid (100 discrete states)
+  num_actions: 4  # Up, Down, Left, Right
+  
+  # Zone configuration (same as tabular)
+  zones:
+    static:
+      percentage: 0.1
+      color: [128, 128, 128]
+    
+    deterministic_a:
+      percentage: 0.3
+      color: [0, 255, 0]
+      rule: "shift_up"
+    
+    deterministic_b:
+      percentage: 0.2
+      color: [0, 0, 255]
+      rule: "shift_right"
+    
+    noisy:
+      percentage: 0.2
+      color: [255, 0, 0]
+      behavior: "random"
+    
+    dynamic:
+      percentage: 0.2
+      color: [255, 255, 0]
+      switch_interval: 100
+      rules: ["shift_up", "shift_right"]
+  
+  # Goal location
+  goal:
+    position: [9, 9]
+    reward: 1.0
+
+# Neural network architecture
+networks:
+  # World Model M: predicts next state
+  world_model:
+    input_dim: 6  # state (2) + action one-hot (4)
+    hidden_dims: [64, 64]
+    output_dim: 2  # next_state (row, col)
+    learning_rate: 0.001
+  
+  # Confidence Network C: predicts model error
+  confidence_net:
+    input_dim: 6  # state (2) + action one-hot (4)
+    hidden_dims: [32, 32]
+    output_dim: 1  # predicted error (scalar)
+    learning_rate: 0.0005  # Slower than M
+  
+  # Q-Network: evaluates state-action pairs
+  q_network:
+    input_dim: 6  # state (2) + action one-hot (4)
+    hidden_dims: [128, 128]
+    output_dim: 4  # Q-value for each action
+    learning_rate: 0.001
+    
+    # Dueling DQN architecture
+    use_dueling: true
+    value_hidden_dim: 64
+    advantage_hidden_dim: 64
+
+# Agent hyperparameters
+agent:
+  # Exploration
+  epsilon: 1.0  # Initial exploration rate
+  epsilon_min: 0.01  # Minimum exploration rate
+  epsilon_decay: 0.9995  # Decay rate per episode
+  
+  # Curiosity
+  beta: 1.0  # Curiosity weight
+  
+  # Discount factor
+  gamma: 0.99
+
+# Training settings
+training:
+  num_episodes: 2000
+  max_steps_per_episode: 200
+  
+  # Replay buffer
+  batch_size: 64
+  buffer_size: 10000
+  min_buffer_size: 1000
+  
+  # Target network (soft update)
+  target_update_frequency: 100  # Update target network every 100 steps
+  tau: 0.005  # Soft update coefficient
+  
+  # Online training for M and C
+  online_training: true
+  
+  # Logging
+  log_interval: 10  # Log every 10 episodes
+  save_interval: 100  # Save checkpoint every 100 episodes
+  
+  # Random seed
+  seed: 42
+
+# Visualization
+visualization:
+  enabled: true
+  cell_size: 50
+  fps: 10
+  
+  # Heatmap
+  show_heatmap: true
+  heatmap_alpha: 0.3
+
+# Paths
+paths:
+  checkpoints: "checkpoints/dqn"
+  logs: "logs/dqn"
+  results: "results/dqn"

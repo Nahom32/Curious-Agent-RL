@@ -1,0 +1,85 @@
+# Tabular Q-Learning Configuration
+# Schmidhuber's Curious Model-Building Control System
+
+# Environment settings
+environment:
+  grid_size: 10  # 10x10 grid (100 discrete states)
+  num_actions: 4  # Up, Down, Left, Right
+  
+  # Zone configuration
+  zones:
+    static:
+      percentage: 0.1  # 10% of grid
+      color: [128, 128, 128]  # Gray
+    
+    deterministic_a:
+      percentage: 0.3  # 30% of grid
+      color: [0, 255, 0]  # Green
+      rule: "shift_up"  # next_state = state + (1, 0)
+    
+    deterministic_b:
+      percentage: 0.2  # 20% of grid
+      color: [0, 0, 255]  # Blue
+      rule: "shift_right"  # next_state = state + (0, 1)
+    
+    noisy:
+      percentage: 0.2  # 20% of grid
+      color: [255, 0, 0]  # Red
+      behavior: "random"  # next_state = random()
+    
+    dynamic:
+      percentage: 0.2  # 20% of grid
+      color: [255, 255, 0]  # Yellow
+      switch_interval: 100  # Switch rules every 100 steps
+      rules: ["shift_up", "shift_right"]
+  
+  # Goal location
+  goal:
+    position: [9, 9]  # Bottom-right corner
+    reward: 1.0
+
+# Agent hyperparameters
+agent:
+  # Learning rates
+  alpha_m: 0.2  # Model learning rate (higher for fast adaptation)
+  alpha_c: 0.05  # Confidence learning rate (slower than M)
+  alpha_q: 0.1  # Q-learning rate
+  
+  # Exploration
+  epsilon: 1.0  # Initial exploration rate
+  epsilon_min: 0.01  # Minimum exploration rate
+  epsilon_decay: 0.9995  # Decay rate per episode
+  
+  # Curiosity
+  beta: 1.0  # Curiosity weight (r_total = r_ext + beta * r_curiosity)
+  
+  # Discount factor
+  gamma: 0.99
+
+# Training settings
+training:
+  num_episodes: 1000
+  max_steps_per_episode: 200
+  
+  # Logging
+  log_interval: 10  # Log every 10 episodes
+  save_interval: 100  # Save checkpoint every 100 episodes
+  
+  # Random seed
+  seed: 42
+
+# Visualization
+visualization:
+  enabled: true
+  cell_size: 50  # Pixels per cell
+  fps: 10  # Frames per second
+  
+  # Heatmap
+  show_heatmap: true
+  heatmap_alpha: 0.3  # Transparency of heatmap overlay
+
+# Paths
+paths:
+  checkpoints: "checkpoints/tabular"
+  logs: "logs/tabular"
+  results: "results/tabular"
