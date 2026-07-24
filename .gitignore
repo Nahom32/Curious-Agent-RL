@@ -149,7 +149,7 @@ cython_debug/
 *~
 .DS_Store
 Thumbs.db
-
+**/__pycache__
 # Project specific
 configs/local.yaml
 *.ckpt

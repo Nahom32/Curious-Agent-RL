@@ -189,12 +189,14 @@ class TestCuriosityMechanism:
         action = 0
         next_state_idx = 5
         
-        # Get confidence before
+        # The first observation reveals that the model is wrong.
+        initial_error = agent.update_model(state_idx, action, next_state_idx)
+        agent.update_confidence(state_idx, action, initial_error)
+
+        # On the next observation, the learned transition is predicted correctly.
         o_c_before = agent.get_confidence_before(state_idx, action)
-        
-        # Update model and confidence
-        agent.update_model(state_idx, action, next_state_idx)
-        agent.update_confidence(state_idx, action, 1.0)  # Error was 1
+        improved_error = agent.update_model(state_idx, action, next_state_idx)
+        agent.update_confidence(state_idx, action, improved_error)
         o_c_after = agent.get_confidence_before(state_idx, action)
         
         # Compute curiosity reward
