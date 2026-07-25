@@ -7,12 +7,14 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from curious_agent.agents.tabular_curious import TabularCuriousAgent
+from curious_agent.agents.dqn_curious import DNQCuriousAgent
 
 
 class TestTabularCuriousAgent:
@@ -232,6 +234,36 @@ class TestCuriosityMechanism:
         # Curiosity reward should be small or zero
         r_curiosity = agent.compute_curiosity_reward(o_c_before, o_c_after)
         assert r_curiosity <= 0.01
+
+
+class TestDNQCuriousAgent:
+    """Test cases for the neural curious agent."""
+
+    def test_dueling_target_network_matches_online_architecture(self):
+        """The target must preserve every configured hidden layer."""
+        agent = DNQCuriousAgent(
+            state_dim=2,
+            num_actions=4,
+            config={
+                "networks": {
+                    "q_network": {
+                        "use_dueling": True,
+                        "hidden_dims": [16, 8],
+                        "value_hidden_dim": 4,
+                        "advantage_hidden_dim": 6,
+                    }
+                }
+            },
+            device=torch.device("cpu"),
+        )
+
+        online_parameters = dict(agent.q_network.named_parameters())
+        target_parameters = dict(agent.target_q_network.named_parameters())
+
+        assert online_parameters.keys() == target_parameters.keys()
+        for name, online_parameter in online_parameters.items():
+            assert torch.equal(online_parameter, target_parameters[name])
+            assert not target_parameters[name].requires_grad
 
 
 if __name__ == "__main__":

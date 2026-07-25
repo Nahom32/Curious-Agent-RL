@@ -10,6 +10,7 @@ Key differences from tabular version:
 3. Curiosity reward is computed per-step using C's before/after predictions
 """
 
+import copy
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -147,23 +148,10 @@ class DNQCuriousAgent:
     
     def _create_target_network(self) -> nn.Module:
         """Create target network as a copy of Q-network."""
-        if isinstance(self.q_network, DuelingQNetwork):
-            target = DuelingQNetwork(
-                state_dim=self.state_dim,
-                num_actions=self.num_actions,
-                hidden_dims=self.q_network.feature_network[0].out_features,
-                value_hidden_dim=self.q_network.value_stream[0].out_features,
-                advantage_hidden_dim=self.q_network.advantage_stream[0].out_features,
-            ).to(self.device)
-        else:
-            target = QNetwork(
-                state_dim=self.state_dim,
-                num_actions=self.num_actions,
-                hidden_dims=[self.q_network.network[0].out_features],
-            ).to(self.device)
-        
-        # Copy weights
-        target.load_state_dict(self.q_network.state_dict())
+        target = copy.deepcopy(self.q_network).to(self.device)
+        target.eval()
+        for parameter in target.parameters():
+            parameter.requires_grad_(False)
         return target
     
     def _update_target_network(self) -> None:

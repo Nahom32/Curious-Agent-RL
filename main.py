@@ -1,0 +1,258 @@
+"""Unified experiment runner for Curious-Agent-RL.
+
+By default, this entry point trains the tabular agent followed by the DQN
+agent. Either experiment can also be run independently.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import logging
+import random
+import sys
+import time
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+import yaml
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+DEFAULT_CONFIGS = {
+    "tabular": PROJECT_ROOT / "configs" / "tabular.yaml",
+    "dqn": PROJECT_ROOT / "configs" / "dqn.yaml",
+}
+
+logger = logging.getLogger(__name__)
+
+
+def run_tabular(config: dict, render: bool) -> None:
+    """Load and run the tabular trainer."""
+    from scripts.train_tabular import train_tabular
+
+    train_tabular(config, render=render)
+
+
+def run_dqn(config: dict, render: bool) -> None:
+    """Load and run the DQN trainer."""
+    from scripts.train_dqn import train_dqn
+
+    train_dqn(config, render=render)
+
+
+TRAINERS: dict[str, Callable[[dict, bool], None]] = {
+    "tabular": run_tabular,
+    "dqn": run_dqn,
+}
+
+
+def load_config(config_path: Path) -> dict:
+    """Load and validate an experiment configuration."""
+    if not config_path.is_file():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+    with config_path.open("r", encoding="utf-8") as config_file:
+        config = yaml.safe_load(config_file)
+
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"Configuration must contain a YAML mapping: {config_path}"
+        )
+
+    return config
+
+
+def set_seed(seed: int, include_torch: bool = False) -> None:
+    """Seed the random number generators used by an experiment."""
+    random.seed(seed)
+    np.random.seed(seed)
+
+    if include_torch:
+        import torch
+
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
+
+def prepare_config(
+    config: dict,
+    agent_name: str,
+    episodes: int | None = None,
+    max_steps: int | None = None,
+    output_dir: Path | None = None,
+) -> dict:
+    """Return a copy of a config with command-line overrides applied."""
+    prepared = copy.deepcopy(config)
+    training = prepared.setdefault("training", {})
+
+    if episodes is not None:
+        training["num_episodes"] = episodes
+    if max_steps is not None:
+        training["max_steps_per_episode"] = max_steps
+
+    if output_dir is not None:
+        agent_output = output_dir / agent_name
+        prepared["paths"] = {
+            "checkpoints": str(agent_output / "checkpoints"),
+            "logs": str(agent_output / "logs"),
+            "results": str(agent_output / "results"),
+        }
+
+    return prepared
+
+
+def selected_agents(agent_option: str) -> list[str]:
+    """Expand the requested pipeline into an execution order."""
+    if agent_option == "both":
+        return ["tabular", "dqn"]
+    return [agent_option]
+
+
+def run_pipeline(args: argparse.Namespace) -> None:
+    """Run the experiments selected by parsed command-line arguments."""
+    config_paths = {
+        "tabular": Path(args.tabular_config).expanduser().resolve(),
+        "dqn": Path(args.dqn_config).expanduser().resolve(),
+    }
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir is not None
+        else None
+    )
+
+    experiments: list[tuple[str, dict, int]] = []
+    for agent_name in selected_agents(args.agent):
+        config = load_config(config_paths[agent_name])
+        config = prepare_config(
+            config,
+            agent_name=agent_name,
+            episodes=args.episodes,
+            max_steps=args.max_steps,
+            output_dir=output_dir,
+        )
+        seed = (
+            args.seed
+            if args.seed is not None
+            else int(config.get("training", {}).get("seed", 42))
+        )
+        experiments.append((agent_name, config, seed))
+
+    logger.info("Experiment pipeline: %s", " -> ".join(selected_agents(args.agent)))
+    for agent_name, config, seed in experiments:
+        training = config.get("training", {})
+        paths = config.get("paths", {})
+        logger.info(
+            "%s: episodes=%s, max_steps=%s, seed=%s, checkpoints=%s",
+            agent_name,
+            training.get("num_episodes"),
+            training.get("max_steps_per_episode"),
+            seed,
+            paths.get("checkpoints"),
+        )
+
+    if args.dry_run:
+        logger.info("Dry run complete; no experiments were started.")
+        return
+
+    pipeline_start = time.monotonic()
+    for agent_name, config, seed in experiments:
+        logger.info("Starting %s experiment", agent_name)
+        set_seed(seed, include_torch=agent_name == "dqn")
+        experiment_start = time.monotonic()
+        TRAINERS[agent_name](config, render=args.render)
+        logger.info(
+            "Finished %s experiment in %.2f seconds",
+            agent_name,
+            time.monotonic() - experiment_start,
+        )
+
+    logger.info(
+        "Full experiment pipeline completed in %.2f seconds",
+        time.monotonic() - pipeline_start,
+    )
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line interface."""
+    parser = argparse.ArgumentParser(
+        description="Run the Curious-Agent-RL experiment pipeline."
+    )
+    parser.add_argument(
+        "--agent",
+        choices=("tabular", "dqn", "both"),
+        default="both",
+        help="Experiment to run (default: both, tabular then DQN).",
+    )
+    parser.add_argument(
+        "--tabular-config",
+        default=str(DEFAULT_CONFIGS["tabular"]),
+        help="Path to the tabular YAML configuration.",
+    )
+    parser.add_argument(
+        "--dqn-config",
+        default=str(DEFAULT_CONFIGS["dqn"]),
+        help="Path to the DQN YAML configuration.",
+    )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        help="Override the number of episodes for every selected experiment.",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        help="Override the maximum steps per episode.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Override the random seed; otherwise use each config's seed.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Store each agent's checkpoints, logs, and results below this directory.",
+    )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Render the environment with Pygame during training.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the resolved experiment plan without training.",
+    )
+    return parser
+
+
+def positive_int(value: int | None, option: str) -> None:
+    """Raise a parser-friendly error for non-positive training overrides."""
+    if value is not None and value <= 0:
+        raise ValueError(f"{option} must be greater than zero")
+
+
+def main() -> None:
+    """Parse arguments and run the selected experiment pipeline."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        positive_int(args.episodes, "--episodes")
+        positive_int(args.max_steps, "--max-steps")
+        run_pipeline(args)
+    except (FileNotFoundError, ValueError) as error:
+        parser.error(str(error))
+
+
+if __name__ == "__main__":
+    main()

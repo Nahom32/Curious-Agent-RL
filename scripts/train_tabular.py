@@ -196,10 +196,14 @@ def train_tabular(config: dict, render: bool = False) -> None:
     logger.info("Training Complete!")
     logger.info(f"Total Episodes: {num_episodes}")
     logger.info(f"Final Epsilon: {agent.epsilon:.3f}")
-    logger.info(f"Average Reward (last 100): {sum(episode_rewards[-100:]) / 100:.3f}")
+    summary_window = min(100, len(episode_rewards))
     logger.info(
-        f"Average Curiosity (last 100): "
-        f"{sum(episode_curiosity_rewards[-100:]) / 100:.3f}"
+        f"Average Reward (last {summary_window}): "
+        f"{sum(episode_rewards[-summary_window:]) / summary_window:.3f}"
+    )
+    logger.info(
+        f"Average Curiosity (last {summary_window}): "
+        f"{sum(episode_curiosity_rewards[-summary_window:]) / summary_window:.3f}"
     )
     logger.info("=" * 50)
     
