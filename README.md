@@ -86,7 +86,7 @@ Development and test tools are provided by the `dev` optional dependency.
 Clone the repository and create a local virtual environment:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Nahom32/Curious-Agent-RL
 cd Curious-Agent-RL
 
 python3 -m venv venv
