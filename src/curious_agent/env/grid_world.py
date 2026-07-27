@@ -1,12 +1,13 @@
 """
 Grid World Environment for Schmidhuber's Curious Agent
 
-A 10x10 grid with 5 zone types:
-- Static: next_state = current_state (boring)
-- Deterministic-A: learnable rules (primary learning target)
-- Deterministic-B: different learnable rules (secondary target)
-- Noisy: random transitions (unlearnable)
-- Dynamic: rules switch between A and B (tests re-curiosity)
+A 10x10 grid with 5 zone types. Every transition starts with the agent's
+selected action, after which the current zone may modify the result:
+- Static: no additional modification (boring and predictable)
+- Deterministic-A: adds a learnable shift (primary learning target)
+- Deterministic-B: adds a different learnable shift (secondary target)
+- Noisy: adds a random one-step perturbation (partly unpredictable)
+- Dynamic: switches between deterministic shifts (tests re-curiosity)
 """
 
 import logging
@@ -269,33 +270,41 @@ class GridWorld:
     def _get_next_position(
         self, row: int, col: int, action: int, zone: Zone
     ) -> Tuple[int, int]:
-        """Get next position based on zone type and action."""
+        """Apply the selected action, then the current zone's modifier.
+
+        Applying the action first is important: the controller must be able to
+        affect transitions for action values to be learnable. Zone rules add
+        dynamics to the intended move instead of replacing it.
+        """
         rule = zone.get_rule()
-        
+
+        # The agent's intended movement is always the base transition.
+        next_row, next_col = self._apply_action(row, col, action)
+
         if rule == "stay" or zone.zone_type == ZoneType.STATIC:
-            # Static zone: stay in place
-            return (row, col)
-        
+            # Static means the environment adds no movement of its own.
+            return (next_row, next_col)
+
         elif rule == "random" or zone.zone_type == ZoneType.NOISY:
-            # Noisy zone: random movement
-            return (
-                np.random.randint(0, self.grid_size),
-                np.random.randint(0, self.grid_size),
+            # Add local stochasticity without discarding the intended action.
+            perturbation = np.random.randint(0, self.num_actions)
+            return self._apply_action(
+                next_row,
+                next_col,
+                perturbation,
             )
-        
+
         elif rule == "shift_up":
-            # Deterministic-A: move up (row decreases)
-            next_row = (row - 1) % self.grid_size
-            return (next_row, col)
-        
+            # Deterministic-A: add an upward cyclic shift.
+            return ((next_row - 1) % self.grid_size, next_col)
+
         elif rule == "shift_right":
-            # Deterministic-B: move right (col increases)
-            next_col = (col + 1) % self.grid_size
-            return (row, next_col)
-        
+            # Deterministic-B: add a rightward cyclic shift.
+            return (next_row, (next_col + 1) % self.grid_size)
+
         else:
-            # Default: apply action
-            return self._apply_action(row, col, action)
+            # Unknown rules must not remove control from the agent.
+            return (next_row, next_col)
     
     def _apply_action(self, row: int, col: int, action: int) -> Tuple[int, int]:
         """Apply action to get next position."""

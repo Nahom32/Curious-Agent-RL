@@ -12,7 +12,7 @@ import pytest
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from curious_agent.env.grid_world import GridWorld, ZoneType, ActionType
+from curious_agent.env.grid_world import ActionType, GridWorld, Zone, ZoneType
 
 
 class TestGridWorld:
@@ -87,6 +87,35 @@ class TestGridWorld:
         # Try to move left from (0, 0) - should stay at (0, 0)
         next_state, _, _, _ = env.step(ActionType.LEFT.value)
         assert next_state[1] == 0
+
+    def test_static_zone_preserves_selected_action(self):
+        """A static zone adds no motion but does not suppress the action."""
+        env = GridWorld(grid_size=5)
+        zone = Zone(zone_type=ZoneType.STATIC, color=(128, 128, 128))
+
+        assert env._get_next_position(2, 2, ActionType.LEFT.value, zone) == (2, 1)
+        assert env._get_next_position(2, 2, ActionType.RIGHT.value, zone) == (2, 3)
+
+    def test_deterministic_zone_modifies_selected_action(self):
+        """A deterministic shift is applied after the intended movement."""
+        env = GridWorld(grid_size=5)
+        zone = Zone(
+            zone_type=ZoneType.DETERMINISTIC_A,
+            color=(0, 255, 0),
+            rule="shift_up",
+        )
+
+        assert env._get_next_position(2, 2, ActionType.LEFT.value, zone) == (1, 1)
+        assert env._get_next_position(2, 2, ActionType.RIGHT.value, zone) == (1, 3)
+
+    def test_noisy_zone_perturbs_instead_of_replacing_action(self, monkeypatch):
+        """Noise is local to the intended destination, not a random teleport."""
+        env = GridWorld(grid_size=5)
+        zone = Zone(zone_type=ZoneType.NOISY, color=(255, 0, 0))
+        monkeypatch.setattr(np.random, "randint", lambda *_: ActionType.UP.value)
+
+        assert env._get_next_position(2, 2, ActionType.LEFT.value, zone) == (1, 1)
+        assert env._get_next_position(2, 2, ActionType.RIGHT.value, zone) == (1, 3)
     
     def test_goal_reward(self):
         """Test goal reward."""
@@ -123,8 +152,6 @@ class TestZone:
     
     def test_static_zone(self):
         """Test static zone behavior."""
-        from curious_agent.env.grid_world import Zone
-        
         zone = Zone(
             zone_type=ZoneType.STATIC,
             color=(128, 128, 128),
@@ -134,8 +161,6 @@ class TestZone:
     
     def test_noisy_zone(self):
         """Test noisy zone behavior."""
-        from curious_agent.env.grid_world import Zone
-        
         zone = Zone(
             zone_type=ZoneType.NOISY,
             color=(255, 0, 0),
@@ -145,8 +170,6 @@ class TestZone:
     
     def test_dynamic_zone_switching(self):
         """Test dynamic zone rule switching."""
-        from curious_agent.env.grid_world import Zone
-        
         zone = Zone(
             zone_type=ZoneType.DYNAMIC,
             color=(255, 255, 0),

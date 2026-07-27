@@ -52,11 +52,11 @@ A 10×10 grid (100 discrete states) with 4 action directions (↑↓←→). The
 
 | Zone | Behavior | Why It Matters |
 |------|----------|----------------|
-| **Static** | `next_state = current_state` always | Boring — agent should leave quickly |
-| **Deterministic-A** | `next_state = f_A(state, action)` with learnable rules | Primary learning target |
-| **Deterministic-B** | `next_state = f_B(state, action)` with different rules | Secondary target — harder or different |
-| **Noisy** | `next_state = random()` | Unlearnable — agent should avoid |
-| **Dynamic** | Rules switch between A and B every N steps | Tests re-curiosity |
+| **Static** | `next_state = apply(action)` with no zone modifier | Boring, predictable baseline |
+| **Deterministic-A** | `next_state = shift_A(apply(action))` | Primary learning target |
+| **Deterministic-B** | `next_state = shift_B(apply(action))` | Secondary target — harder or different |
+| **Noisy** | `next_state = perturb(apply(action))` | Partly unlearnable — agent should avoid |
+| **Dynamic** | Modifier switches between A and B every N steps | Tests re-curiosity |
 
 **External reward** `r_ext`: Place a small goal in one corner. The agent gets +1 for reaching it. This tests whether curiosity *helps* or *hurts* task completion.
 

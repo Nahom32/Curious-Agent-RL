@@ -60,11 +60,11 @@ and right. Its cells are divided among five configurable zone types:
 
 | Zone | Transition behavior | Experimental purpose |
 | --- | --- | --- |
-| Static | Agent remains in place | Already-boring behavior |
-| Deterministic A | Fixed learnable rule | Primary learnable region |
-| Deterministic B | A different fixed rule | Alternative learnable region |
-| Noisy | Random transition | Persistently unpredictable region |
-| Dynamic | Switches between rules | Tests renewed curiosity |
+| Static | Selected action only; no zone modification | Already-boring behavior |
+| Deterministic A | Selected action plus a fixed learnable shift | Primary learnable region |
+| Deterministic B | Selected action plus a different fixed shift | Alternative learnable region |
+| Noisy | Selected action plus a random local perturbation | Persistently unpredictable region |
+| Dynamic | Selected action plus a periodically switching shift | Tests renewed curiosity |
 
 The agent begins at the top-left corner. The default external goal is at the
 bottom-right corner and provides a reward of `1.0`.
