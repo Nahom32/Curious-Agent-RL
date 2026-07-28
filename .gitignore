@@ -159,3 +159,4 @@ wandb/
 tensorboard/
 data/
 models/checkpoints/
+Schmidhuber_RL_Exploration.png 
