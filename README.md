@@ -267,11 +267,18 @@ venv/bin/python scripts/visualize.py \
 venv/bin/python scripts/visualize.py \
   --mode curves \
   --log-file training_tabular.log
+
+# Plot DQN metrics after training
+venv/bin/python scripts/visualize.py \
+  --config configs/dqn.yaml \
+  --mode curves \
+  --log-file training_dqn.log
 ```
 
 The heatmap command looks for the checkpoint path specified in the selected
 configuration. Matplotlib modes create PNG files and open an interactive plot
-window.
+window. Training curves require the periodic episode records in the log; model
+checkpoints do not store historical episode metrics.
 
 ## Testing
 

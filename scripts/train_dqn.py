@@ -32,6 +32,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def ensure_training_log(log_path: str | Path = "training_dqn.log") -> logging.Handler | None:
+    """Ensure DQN progress is written even when a parent configured logging.
+
+    ``logging.basicConfig`` is intentionally a no-op when the unified runner
+    has already installed a root handler. In that case the stream output still
+    appeared, but no DQN file handler was created.
+    """
+    resolved_path = Path(log_path).resolve()
+
+    for configured_logger in (logger, logging.getLogger()):
+        for handler in configured_logger.handlers:
+            if not isinstance(handler, logging.FileHandler):
+                continue
+            if Path(handler.baseFilename).resolve() == resolved_path:
+                return None
+
+    file_handler = logging.FileHandler(resolved_path)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+    )
+    if logger.getEffectiveLevel() > logging.INFO:
+        logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    return file_handler
+
+
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
     with open(config_path, "r") as f:
@@ -46,6 +75,11 @@ def train_dqn(config: dict, render: bool = False) -> None:
         config: Configuration dictionary
         render: Whether to render with Pygame
     """
+    # The unified runner configures console logging before importing this
+    # module, which makes the module-level basicConfig call a no-op. Install
+    # the expected file handler explicitly so visualization data is retained.
+    ensure_training_log()
+
     # Create directories
     paths = config.get("paths", {})
     checkpoint_dir = Path(paths.get("checkpoints", "checkpoints/dqn"))

@@ -193,7 +193,15 @@ def plot_training_curves(log_file: str) -> None:
     lengths = []
     epsilons = []
     
-    with open(log_file, "r") as f:
+    log_path = Path(log_file)
+    if not log_path.is_file():
+        logger.error(
+            "Training log not found: %s. Capture a DQN run before plotting.",
+            log_path,
+        )
+        return
+
+    with log_path.open("r", encoding="utf-8") as f:
         for line in f:
             if "Episode" in line and "Avg Reward" in line:
                 # Parse line
@@ -211,7 +219,12 @@ def plot_training_curves(log_file: str) -> None:
                 epsilons.append(epsilon)
     
     if not episodes:
-        logger.warning("No training data found in log file")
+        logger.warning(
+            "No episode metrics found in %s. The file must contain progress "
+            "lines with 'Episode' and 'Avg Reward'. A completed checkpoint "
+            "does not contain the historical curve.",
+            log_path,
+        )
         return
     
     # Plot
