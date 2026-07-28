@@ -9,6 +9,7 @@ This script provides visualization tools for the curious agent:
 
 import argparse
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -30,6 +31,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+TRAINING_METRIC_PATTERN = re.compile(
+    r"Episode (?P<episode>\d+)/\d+: "
+    r"Avg Reward=(?P<reward>[-+]?\d*\.?\d+), "
+    r"Avg Curiosity=(?P<curiosity>[-+]?\d*\.?\d+), "
+    r"Avg Length=(?P<length>[-+]?\d*\.?\d+), "
+    r"Epsilon=(?P<epsilon>[-+]?\d*\.?\d+)"
+)
 
 
 def load_config(config_path: str) -> dict:
@@ -203,20 +212,15 @@ def plot_training_curves(log_file: str) -> None:
 
     with log_path.open("r", encoding="utf-8") as f:
         for line in f:
-            if "Episode" in line and "Avg Reward" in line:
-                # Parse line
-                parts = line.split(", ")
-                episode = int(parts[0].split("/")[0].split()[-1])
-                reward = float(parts[1].split("=")[1])
-                curiosity = float(parts[2].split("=")[1])
-                length = float(parts[3].split("=")[1])
-                epsilon = float(parts[4].split("=")[1])
-                
-                episodes.append(episode)
-                rewards.append(reward)
-                curiosities.append(curiosity)
-                lengths.append(length)
-                epsilons.append(epsilon)
+            match = TRAINING_METRIC_PATTERN.search(line)
+            if match is None:
+                continue
+
+            episodes.append(int(match.group("episode")))
+            rewards.append(float(match.group("reward")))
+            curiosities.append(float(match.group("curiosity")))
+            lengths.append(float(match.group("length")))
+            epsilons.append(float(match.group("epsilon")))
     
     if not episodes:
         logger.warning(
