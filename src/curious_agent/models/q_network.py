@@ -120,6 +120,7 @@ class QNetwork(nn.Module):
         next_states: torch.Tensor,
         dones: torch.Tensor,
         gamma: float = 0.99,
+        target_network: Optional[nn.Module] = None,
     ) -> float:
         """
         Update Q-network using DQN loss.
@@ -131,6 +132,8 @@ class QNetwork(nn.Module):
             next_states: Next states [batch_size, state_dim]
             dones: Done flags [batch_size]
             gamma: Discount factor
+            target_network: Frozen network used to bootstrap the TD target.
+                Defaults to this network for backwards compatibility.
         
         Returns:
             Loss value
@@ -142,8 +145,9 @@ class QNetwork(nn.Module):
         current_q = current_q.gather(1, actions.unsqueeze(1)).squeeze(1)
         
         # Get target Q-values
+        bootstrap_network = target_network or self
         with torch.no_grad():
-            next_q = self.forward(next_states)
+            next_q = bootstrap_network(next_states)
             next_q = next_q.max(dim=1)[0]
             target_q = rewards + gamma * next_q * (1 - dones)
         
@@ -326,6 +330,7 @@ class DuelingQNetwork(nn.Module):
         next_states: torch.Tensor,
         dones: torch.Tensor,
         gamma: float = 0.99,
+        target_network: Optional[nn.Module] = None,
     ) -> float:
         """
         Update Q-network using DQN loss.
@@ -337,6 +342,8 @@ class DuelingQNetwork(nn.Module):
             next_states: Next states [batch_size, state_dim]
             dones: Done flags [batch_size]
             gamma: Discount factor
+            target_network: Frozen network used to bootstrap the TD target.
+                Defaults to this network for backwards compatibility.
         
         Returns:
             Loss value
@@ -348,8 +355,9 @@ class DuelingQNetwork(nn.Module):
         current_q = current_q.gather(1, actions.unsqueeze(1)).squeeze(1)
         
         # Get target Q-values
+        bootstrap_network = target_network or self
         with torch.no_grad():
-            next_q = self.forward(next_states)
+            next_q = bootstrap_network(next_states)
             next_q = next_q.max(dim=1)[0]
             target_q = rewards + gamma * next_q * (1 - dones)
         

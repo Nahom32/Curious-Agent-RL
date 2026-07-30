@@ -40,6 +40,76 @@ TRAINING_METRIC_PATTERN = re.compile(
     r"Epsilon=(?P<epsilon>[-+]?\d*\.?\d+)"
 )
 
+VANILLA_DQN_PATTERN = re.compile(
+    r"Episode (?P<episode>\d+)/\d+: "
+    r"Avg External Return=(?P<external_return>[-+]?\d*\.?\d+), "
+    r"Success Rate=(?P<success_rate>[-+]?\d*\.?\d+), "
+    r"Avg Length=(?P<length>[-+]?\d*\.?\d+), "
+    r"Epsilon=(?P<epsilon>[-+]?\d*\.?\d+)"
+)
+
+
+def parse_log_file(
+    log_file: str,
+) -> dict[str, list[float]] | None:
+    """Parse a training log file, auto-detecting the log format.
+
+    Returns a dict with keys ``episode``, ``reward``, ``length``, ``epsilon``,
+    and optionally ``curiosity`` / ``success_rate`` depending on the agent type.
+    Returns ``None`` when the file cannot be found or parsed.
+    """
+    log_path = Path(log_file)
+    if not log_path.is_file():
+        logger.error("Training log not found: %s", log_path)
+        return None
+
+    records: dict[str, list[float]] = {
+        "episode": [],
+        "reward": [],
+        "length": [],
+        "epsilon": [],
+    }
+    has_curiosity = False
+    has_success = False
+
+    with log_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            match = TRAINING_METRIC_PATTERN.search(line)
+            if match is not None:
+                records["episode"].append(float(match.group("episode")))
+                records["reward"].append(float(match.group("reward")))
+                records["length"].append(float(match.group("length")))
+                records["epsilon"].append(float(match.group("epsilon")))
+                curiosity = float(match.group("curiosity"))
+                records.setdefault("curiosity", []).append(curiosity)
+                has_curiosity = True
+                continue
+
+            match = VANILLA_DQN_PATTERN.search(line)
+            if match is not None:
+                records["episode"].append(float(match.group("episode")))
+                records["reward"].append(float(match.group("external_return")))
+                records["length"].append(float(match.group("length")))
+                records["epsilon"].append(float(match.group("epsilon")))
+                success_rate = float(match.group("success_rate"))
+                records.setdefault("success_rate", []).append(success_rate)
+                has_success = True
+
+    if not records["episode"]:
+        logger.warning(
+            "No episode metrics found in %s. The file must contain progress "
+            "lines with 'Episode' and 'Avg Reward' or 'Avg External Return'.",
+            log_path,
+        )
+        return None
+
+    if not has_curiosity:
+        records.pop("curiosity", None)
+    if not has_success:
+        records.pop("success_rate", None)
+
+    return records
+
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
@@ -273,6 +343,100 @@ def plot_training_curves(log_file: str) -> None:
     logger.info("Training curves saved to training_curves.png")
 
 
+def plot_comparison(log_files: list[str], labels: list[str] | None = None) -> None:
+    """
+    Plot coupled training curves comparing multiple agents on the same axes.
+
+    Args:
+        log_files: List of paths to training log files (one per agent).
+        labels: Optional list of legend labels (defaults to filenames).
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.error("matplotlib not installed. Run: pip install matplotlib")
+        return
+
+    if labels is None:
+        labels = [Path(f).stem for f in log_files]
+    if len(labels) != len(log_files):
+        logger.error(
+            "Number of labels (%d) must match number of log files (%d)",
+            len(labels),
+            len(log_files),
+        )
+        return
+
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+    markers = ["o", "s", "D", "^", "v", "<"]
+
+    all_records: list[dict | None] = []
+    for lf in log_files:
+        all_records.append(parse_log_file(lf))
+
+    valid = [(i, r, labels[i]) for i, r in enumerate(all_records) if r is not None]
+    if len(valid) < 2:
+        logger.error(
+            "Need at least 2 valid log files for comparison (got %d).",
+            len(valid),
+        )
+        return
+
+    has_curiosity = any("curiosity" in r for _, r, _ in valid)
+    n_panels = 4 if has_curiosity else 3
+
+    fig, axes = plt.subplots(1, n_panels, figsize=(6 * n_panels, 5))
+
+    panel_titles = ["Average Reward", "Episode Length", "Epsilon"]
+    panel_ylabels = ["Avg Reward", "Avg Length (steps)", "Epsilon"]
+    panel_keys = ["reward", "length", "epsilon"]
+
+    if has_curiosity:
+        panel_titles.append("Curiosity Reward")
+        panel_ylabels.append("Avg Curiosity Reward")
+        panel_keys.append("curiosity")
+
+    ax_list = axes if n_panels > 1 else [axes]
+
+    for i, (title, ylabel, key) in enumerate(
+        zip(panel_titles, panel_ylabels, panel_keys)
+    ):
+        ax = ax_list[i]
+        for idx, (_, record, label) in enumerate(valid):
+            if key not in record:
+                continue
+            episodes = record["episode"]
+            values = record[key]
+            color = colors[idx % len(colors)]
+            marker = markers[idx % len(markers)]
+            # Subsample markers for readability
+            step = max(1, len(episodes) // 20)
+            ax.plot(
+                episodes, values, color=color, alpha=0.7, label=label, linewidth=1.5
+            )
+            ax.scatter(
+                episodes[::step],
+                values[::step],
+                color=color,
+                marker=marker,
+                s=20,
+                alpha=0.5,
+                zorder=5,
+            )
+        ax.set_xlabel("Episode")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+
+    fig.suptitle("Coupled RL Performance Comparison", fontsize=14, fontweight="bold")
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig("rl_comparison.png", dpi=150)
+    plt.show()
+
+    logger.info("Comparison plot saved to rl_comparison.png")
+
+
 def visualize_zone_distribution(agent: TabularCuriousAgent, grid_size: int = 10) -> None:
     """
     Visualize time spent in each zone type.
@@ -342,7 +506,7 @@ def main():
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["live", "heatmap", "curves", "zones"],
+        choices=["live", "heatmap", "curves", "zones", "compare"],
         default="live",
         help="Visualization mode",
     )
@@ -357,6 +521,18 @@ def main():
         type=str,
         default="training_tabular.log",
         help="Path to log file for curve plotting",
+    )
+    parser.add_argument(
+        "--log-files",
+        type=str,
+        nargs="+",
+        help="Multiple log files for comparison mode",
+    )
+    parser.add_argument(
+        "--label",
+        type=str,
+        nargs="+",
+        help="Legend labels for comparison mode (one per --log-files)",
     )
     
     args = parser.parse_args()
@@ -394,6 +570,13 @@ def main():
             config=config,
         )
         visualize_zone_distribution(agent, grid_size=config.get("environment", {}).get("grid_size", 10))
+    elif args.mode == "compare":
+        if not args.log_files or len(args.log_files) < 2:
+            parser.error(
+                "Comparison mode requires at least two log files via --log-files."
+            )
+        labels = args.label if args.label else None
+        plot_comparison(args.log_files, labels=labels)
 
 
 if __name__ == "__main__":

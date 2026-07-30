@@ -50,8 +50,10 @@ At each environment step, the pipeline:
 | Stabilization | Direct Q-learning updates | Replay buffer and a target-network copy |
 | Checkpoint | NumPy `.npz` | PyTorch `.pt` |
 
-The unified runner executes the tabular experiment first and the DQN experiment
-second by default. Either implementation can also be run independently.
+The unified runner executes the tabular experiment first and the curious DQN
+experiment second by default. A separate vanilla DQN provides an
+external-reward-only ablation, and either neural implementation can be run
+independently or as a pair.
 
 ## Environment
 
@@ -133,9 +135,11 @@ The default run is substantially longer: 1,000 tabular episodes followed by
 ## Command-line options
 
 ```text
---agent {tabular,dqn,both}  Select an implementation; default is both
+--agent {tabular,dqn,vanilla-dqn,dqn-pair,both}
+                              Select an experiment; default is both
 --tabular-config PATH       Use a custom tabular YAML configuration
 --dqn-config PATH           Use a custom DQN YAML configuration
+--vanilla-dqn-config PATH   Use a custom vanilla DQN YAML configuration
 --episodes N                Override episodes for all selected agents
 --max-steps N               Override maximum steps per episode
 --seed N                    Override the configured random seed
@@ -155,6 +159,8 @@ venv/bin/python main.py --help
 ```bash
 venv/bin/python main.py --agent tabular
 venv/bin/python main.py --agent dqn
+venv/bin/python main.py --agent vanilla-dqn
+venv/bin/python main.py --agent dqn-pair
 ```
 
 ### Use custom configurations
@@ -183,6 +189,7 @@ The default experiment definitions are:
 
 - [`configs/tabular.yaml`](configs/tabular.yaml)
 - [`configs/dqn.yaml`](configs/dqn.yaml)
+- [`configs/vanilla_dqn.yaml`](configs/vanilla_dqn.yaml)
 
 Both files configure:
 
@@ -205,7 +212,8 @@ agent:
 
 `beta` controls the contribution of intrinsic reward to the controller's total
 reward. A value of `0.0` disables curiosity and provides a useful external-only
-baseline.
+reward check, but the dedicated vanilla DQN is the preferred ablation because
+it does not construct or train the curiosity models at all.
 
 ## Outputs
 
@@ -224,12 +232,19 @@ With `--output-dir runs/experiment-01`, they are written to:
 ```text
 runs/experiment-01/
 ├── tabular/checkpoints/agent_final.npz
-└── dqn/checkpoints/agent_final.pt
+├── dqn/checkpoints/agent_final.pt
+└── vanilla-dqn/checkpoints/agent_final.pt
 ```
 
 Periodic checkpoints are controlled by `training.save_interval`. Training
-progress and summary metrics are currently emitted to the console. The YAML
-`logs` and `results` directories are reserved for expanded experiment tracking.
+progress and summary metrics are emitted to the console, and a coupled
+comparison plot can be generated from the log files after training:
+
+```bash
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files runs/experiment-01/*/logs/training.log
+```
 
 ## Standalone training scripts
 
@@ -243,13 +258,18 @@ venv/bin/python scripts/train_tabular.py \
 venv/bin/python scripts/train_dqn.py \
   --config configs/dqn.yaml \
   --seed 42
+
+venv/bin/python scripts/train_vanilla_dqn.py \
+  --config configs/vanilla_dqn.yaml \
+  --seed 42
 ```
 
 Add `--render` to either command to open the Pygame environment.
 
 ## Visualization
 
-The visualization script currently focuses on the tabular agent:
+The visualization script provides live rendering, heatmap analysis, training
+curves, and coupled comparison plots:
 
 ```bash
 # Train and display a live tabular agent
@@ -273,12 +293,29 @@ venv/bin/python scripts/visualize.py \
   --config configs/dqn.yaml \
   --mode curves \
   --log-file training_dqn.log
+
+# Coupled comparison across multiple agents on the same axes
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files training_dqn.log training_tabular.log \
+  --label "Curious DQN" "Tabular"
+
+# Compare curious DQN against the vanilla ablation
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files logs/vanilla_dqn/training.log training_dqn.log \
+  --label "Vanilla DQN" "Curious DQN"
 ```
 
 The heatmap command looks for the checkpoint path specified in the selected
 configuration. Matplotlib modes create PNG files and open an interactive plot
 window. Training curves require the periodic episode records in the log; model
 checkpoints do not store historical episode metrics.
+
+The `compare` mode auto-detects the log format (curious-agent or vanilla DQN)
+and overlays the shared metrics — **Average Reward**, **Episode Length**, and
+**Epsilon** — plus **Curiosity Reward** for curious agents, generating a single
+coupled figure saved to `rl_comparison.png`.
 
 ## Testing
 
@@ -305,15 +342,18 @@ Curious-Agent-RL/
 ├── main.py                         # Unified experiment pipeline
 ├── configs/
 │   ├── tabular.yaml                # Tabular experiment configuration
-│   └── dqn.yaml                    # Neural experiment configuration
+│   ├── dqn.yaml                    # Curious neural experiment
+│   └── vanilla_dqn.yaml            # External-reward-only DQN
 ├── scripts/
 │   ├── train_tabular.py            # Standalone tabular trainer
 │   ├── train_dqn.py                # Standalone DQN trainer
+│   ├── train_vanilla_dqn.py        # Vanilla DQN ablation trainer
 │   └── visualize.py                # Live and analytical visualization
 ├── src/curious_agent/
 │   ├── agents/
 │   │   ├── tabular_curious.py      # Tabular M, C, and Q agent
-│   │   └── dqn_curious.py          # Neural M, C, and Q agent
+│   │   ├── dqn_curious.py          # Neural M, C, and Q agent
+│   │   └── dqn.py                  # External-reward-only DQN
 │   ├── env/grid_world.py           # Multi-zone grid environment
 │   ├── models/
 │   │   ├── world_model.py
@@ -332,14 +372,15 @@ benchmark-ready RL framework.
   model's change in predicted error.
 - The tabular world model stores one next-state prediction per state-action
   pair, so it cannot represent a full stochastic transition distribution.
-- The DQN agent maintains and soft-updates a target-network copy, but its
-  current bootstrap loss still uses the online Q-network.
+- Both DQN variants bootstrap TD targets from a soft-updated target-network
+  copy.
 - Visualization and checkpoint analysis are currently more complete for the
   tabular agent than for DQN.
 - Zone-distribution visualization and tabular model-accuracy reporting still
   contain placeholder logic.
-- The unified runner saves checkpoints, but it does not yet aggregate repeated
-  seeds, evaluate trained policies, or generate comparison reports.
+- The unified runner saves checkpoints and log files, and a multi-agent
+  comparison plot can be produced from logs; it does not yet aggregate
+  repeated seeds or evaluate trained policies.
 
 These constraints make the project most useful for learning, prototyping, and
 extending curiosity-driven exploration experiments.

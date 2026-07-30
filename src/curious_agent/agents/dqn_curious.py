@@ -321,7 +321,13 @@ class DNQCuriousAgent:
         
         # Update Q-network
         loss = self.q_network.update(
-            states, actions, rewards, next_states, dones, gamma=self.gamma
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            gamma=self.gamma,
+            target_network=self.target_q_network,
         )
         
         self.q_losses.append(loss)

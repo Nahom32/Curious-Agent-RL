@@ -26,6 +26,7 @@ if str(SRC_ROOT) not in sys.path:
 DEFAULT_CONFIGS = {
     "tabular": PROJECT_ROOT / "configs" / "tabular.yaml",
     "dqn": PROJECT_ROOT / "configs" / "dqn.yaml",
+    "vanilla-dqn": PROJECT_ROOT / "configs" / "vanilla_dqn.yaml",
 }
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,17 @@ def run_dqn(config: dict, render: bool) -> None:
     train_dqn(config, render=render)
 
 
+def run_vanilla_dqn(config: dict, render: bool) -> None:
+    """Load and run the external-reward-only DQN trainer."""
+    from scripts.train_vanilla_dqn import train_vanilla_dqn
+
+    train_vanilla_dqn(config, render=render)
+
+
 TRAINERS: dict[str, Callable[[dict, bool], None]] = {
     "tabular": run_tabular,
     "dqn": run_dqn,
+    "vanilla-dqn": run_vanilla_dqn,
 }
 
 
@@ -111,6 +120,8 @@ def selected_agents(agent_option: str) -> list[str]:
     """Expand the requested pipeline into an execution order."""
     if agent_option == "both":
         return ["tabular", "dqn"]
+    if agent_option == "dqn-pair":
+        return ["vanilla-dqn", "dqn"]
     return [agent_option]
 
 
@@ -119,6 +130,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     config_paths = {
         "tabular": Path(args.tabular_config).expanduser().resolve(),
         "dqn": Path(args.dqn_config).expanduser().resolve(),
+        "vanilla-dqn": Path(args.vanilla_dqn_config).expanduser().resolve(),
     }
     output_dir = (
         Path(args.output_dir).expanduser().resolve()
@@ -141,6 +153,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             if args.seed is not None
             else int(config.get("training", {}).get("seed", 42))
         )
+        config.setdefault("training", {})["seed"] = seed
         experiments.append((agent_name, config, seed))
 
     logger.info("Experiment pipeline: %s", " -> ".join(selected_agents(args.agent)))
@@ -163,7 +176,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     pipeline_start = time.monotonic()
     for agent_name, config, seed in experiments:
         logger.info("Starting %s experiment", agent_name)
-        set_seed(seed, include_torch=agent_name == "dqn")
+        set_seed(seed, include_torch=agent_name in {"dqn", "vanilla-dqn"})
         experiment_start = time.monotonic()
         TRAINERS[agent_name](config, render=args.render)
         logger.info(
@@ -185,9 +198,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--agent",
-        choices=("tabular", "dqn", "both"),
+        choices=("tabular", "dqn", "vanilla-dqn", "dqn-pair", "both"),
         default="both",
-        help="Experiment to run (default: both, tabular then DQN).",
+        help=(
+            "Experiment to run. 'dqn-pair' runs the vanilla baseline followed "
+            "by curiosity-coupled DQN."
+        ),
     )
     parser.add_argument(
         "--tabular-config",
@@ -198,6 +214,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dqn-config",
         default=str(DEFAULT_CONFIGS["dqn"]),
         help="Path to the DQN YAML configuration.",
+    )
+    parser.add_argument(
+        "--vanilla-dqn-config",
+        default=str(DEFAULT_CONFIGS["vanilla-dqn"]),
+        help="Path to the vanilla DQN YAML configuration.",
     )
     parser.add_argument(
         "--episodes",

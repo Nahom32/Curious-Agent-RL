@@ -291,3 +291,81 @@ curious_agent/
 - Schmidhuber, J. (1991). *Curious Model-Building Control Systems*. In Proc. IJCNN, Singapore, vol. 2, pp. 1458–1463. IEEE.
 - Watkins, C. J. C. H. (1989). *Learning from Delayed Rewards*. PhD Thesis, Cambridge.
 - Pathak, D., et al. (2017). *Curiosity-driven Exploration by Self-supervised Prediction*. ICML 2017. (Modern extension)
+
+---
+
+## 11. Vanilla DQN Ablation and Comparative Profiling
+
+### 11.1 Purpose
+
+The base case is a genuine vanilla DQN that learns only from external
+environment rewards. It does not instantiate or update the world model M,
+confidence model C, or any intrinsic-reward mechanism.
+
+The controlled comparison is:
+
+```text
+vanilla DQN reward = r_external
+curious DQN reward = r_external + beta * r_curiosity
+```
+
+Both variants otherwise use the same environment, Q-network architecture,
+replay settings, exploration schedule, and target-network update rule.
+
+### 11.2 Base-Case Architecture
+
+The vanilla agent owns only:
+
+- an online Q-network and frozen target Q-network;
+- an external-reward replay buffer;
+- epsilon-greedy action selection;
+- mini-batch TD optimization;
+- epsilon decay and versioned checkpoint state.
+
+TD targets bootstrap from the target network:
+
+```text
+y = r_external + gamma * (1 - done) * max_a Q_target(next_state, a)
+```
+
+The target network is soft-updated at the configured interval. Vanilla
+checkpoints contain no world-model or confidence-network parameters.
+
+### 11.3 Metrics and Outputs
+
+External task performance must remain separate from curiosity-shaped reward.
+The vanilla trainer records:
+
+- external episode return;
+- goal success as a binary episode outcome;
+- positive external-feedback count and per-step rate;
+- episode length, epsilon, and mean Q loss.
+
+Per-episode records are written to `episodes.csv`, aggregate metrics from the
+last 100 episodes to `summary.json`, and model state to `agent_final.pt`.
+
+### 11.4 Commands
+
+Run the base case directly:
+
+```bash
+venv/bin/python scripts/train_vanilla_dqn.py \
+  --config configs/vanilla_dqn.yaml
+```
+
+Run it through the unified runner:
+
+```bash
+venv/bin/python main.py --agent vanilla-dqn
+```
+
+Run the base case followed by the curiosity-coupled DQN:
+
+```bash
+venv/bin/python main.py --agent dqn-pair --output-dir runs/dqn-ablation
+```
+
+The pair command provides matching configuration-level episode, step, and seed
+overrides. A later experiment-aggregation phase can repeat this paired run over
+multiple seeds and combine both variants' result files into confidence bands
+and comparison plots.

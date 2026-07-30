@@ -11,6 +11,7 @@ def make_args(tmp_path: Path, **overrides) -> Namespace:
         "agent": "both",
         "tabular_config": str(main.DEFAULT_CONFIGS["tabular"]),
         "dqn_config": str(main.DEFAULT_CONFIGS["dqn"]),
+        "vanilla_dqn_config": str(main.DEFAULT_CONFIGS["vanilla-dqn"]),
         "episodes": 2,
         "max_steps": 3,
         "seed": 7,
@@ -78,3 +79,37 @@ def test_dry_run_does_not_start_training(monkeypatch, tmp_path):
     monkeypatch.setitem(main.TRAINERS, "dqn", fail_if_called)
 
     main.run_pipeline(make_args(tmp_path, dry_run=True))
+
+
+def test_dqn_pair_runs_vanilla_before_curiosity(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "vanilla-dqn",
+        lambda config, render: calls.append("vanilla-dqn"),
+    )
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "dqn",
+        lambda config, render: calls.append("dqn"),
+    )
+
+    main.run_pipeline(make_args(tmp_path, agent="dqn-pair"))
+
+    assert calls == ["vanilla-dqn", "dqn"]
+
+
+def test_seed_override_is_written_to_prepared_config(monkeypatch, tmp_path):
+    configured_seeds = []
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "vanilla-dqn",
+        lambda config, render: configured_seeds.append(config["training"]["seed"]),
+    )
+
+    main.run_pipeline(
+        make_args(tmp_path, agent="vanilla-dqn", seed=123)
+    )
+
+    assert configured_seeds == [123]
