@@ -125,6 +125,54 @@ def selected_agents(agent_option: str) -> list[str]:
     return [agent_option]
 
 
+def _resolve_log_files(
+    agent_names: list[str],
+    output_dir: Path | None,
+) -> dict[str, Path]:
+    """Map agent names to their training log files after a pipeline run."""
+    log_files: dict[str, Path] = {}
+    for name in agent_names:
+        if output_dir is not None:
+            candidate = output_dir / name / "logs" / "training.log"
+        elif name == "vanilla-dqn":
+            candidate = Path("logs") / "vanilla_dqn" / "training.log"
+        else:
+            candidate = Path(f"training_{name}.log")
+
+        if candidate.is_file():
+            log_files[name] = candidate.resolve()
+    return log_files
+
+
+def _generate_comparison_plot(
+    agent_names: list[str],
+    output_dir: Path | None,
+    labels: list[str] | None = None,
+) -> None:
+    """Generate a coupled comparison plot from multi-agent pipeline logs."""
+    try:
+        from scripts.visualize import plot_comparison
+    except ImportError:
+        logger.warning("Could not import plot_comparison; skipping comparison plot.")
+        return
+
+    log_files = _resolve_log_files(agent_names, output_dir)
+    if len(log_files) < 2:
+        logger.info(
+            "Found %d log file(s); need at least 2 for a comparison plot.",
+            len(log_files),
+        )
+        return
+
+    paths = [str(p) for p in log_files.values()]
+    resolved_labels = labels or list(log_files.keys())
+    logger.info("Generating comparison plot from: %s", ", ".join(log_files))
+    try:
+        plot_comparison(paths, labels=resolved_labels)
+    except Exception:
+        logger.warning("Comparison plot generation failed.", exc_info=True)
+
+
 def run_pipeline(args: argparse.Namespace) -> None:
     """Run the experiments selected by parsed command-line arguments."""
     config_paths = {
@@ -190,6 +238,12 @@ def run_pipeline(args: argparse.Namespace) -> None:
         time.monotonic() - pipeline_start,
     )
 
+    if len(experiments) > 1 and not args.no_plot:
+        _generate_comparison_plot(
+            [name for name, _, _ in experiments],
+            output_dir,
+        )
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line interface."""
@@ -248,6 +302,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Print the resolved experiment plan without training.",
+    )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="Skip automatic comparison plot generation after multi-agent runs.",
     )
     return parser
 

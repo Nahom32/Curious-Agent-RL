@@ -18,6 +18,7 @@ def make_args(tmp_path: Path, **overrides) -> Namespace:
         "output_dir": str(tmp_path),
         "render": False,
         "dry_run": False,
+        "no_plot": True,
     }
     values.update(overrides)
     return Namespace(**values)
