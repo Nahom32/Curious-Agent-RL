@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from curious_agent.agents.tabular_curious import TabularCuriousAgent
 from curious_agent.agents.dqn_curious import DNQCuriousAgent
+from curious_agent.agents.dqn import DQNAgent
 
 
 class TestTabularCuriousAgent:
@@ -264,6 +265,71 @@ class TestDNQCuriousAgent:
         for name, online_parameter in online_parameters.items():
             assert torch.equal(online_parameter, target_parameters[name])
             assert not target_parameters[name].requires_grad
+
+
+class TestVanillaDQNAgent:
+    """Tests for the external-reward-only DQN ablation."""
+
+    def test_has_no_curiosity_components(self):
+        agent = DQNAgent(
+            config={"networks": {"q_network": {"hidden_dims": [8]}}},
+            device=torch.device("cpu"),
+        )
+
+        assert not hasattr(agent, "world_model")
+        assert not hasattr(agent, "confidence_net")
+        assert not hasattr(agent, "beta")
+
+    def test_stores_external_reward_without_shaping(self):
+        agent = DQNAgent(device=torch.device("cpu"))
+        state = np.array([0.0, 0.0], dtype=np.float32)
+        next_state = np.array([0.0, 1.0], dtype=np.float32)
+
+        agent.store_experience(state, 3, 0.75, next_state, False)
+
+        assert agent.replay_buffer.buffer[0].reward == 0.75
+
+    def test_bootstraps_from_target_network(self):
+        agent = DQNAgent(
+            config={
+                "agent": {"gamma": 0.5},
+                "networks": {
+                    "q_network": {
+                        "hidden_dims": [],
+                        "learning_rate": 0.001,
+                        "use_dueling": False,
+                    }
+                },
+                "training": {
+                    "batch_size": 1,
+                    "min_buffer_size": 1,
+                    "target_update_frequency": 100,
+                },
+            },
+            device=torch.device("cpu"),
+        )
+        with torch.no_grad():
+            agent.q_network.network[0].weight.zero_()
+            agent.q_network.network[0].bias.zero_()
+            agent.target_q_network.network[0].weight.zero_()
+            agent.target_q_network.network[0].bias.fill_(1.0)
+
+        state = np.array([0.0, 0.0], dtype=np.float32)
+        agent.store_experience(state, 0, 0.0, state, False)
+
+        assert agent.update_q_network() == pytest.approx(0.25)
+
+    def test_checkpoint_contains_only_dqn_state(self, tmp_path):
+        agent = DQNAgent(device=torch.device("cpu"))
+        checkpoint_path = tmp_path / "vanilla.pt"
+
+        agent.save(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+        assert checkpoint["agent_type"] == "vanilla_dqn"
+        assert "q_network" in checkpoint
+        assert "world_model" not in checkpoint
+        assert "confidence_net" not in checkpoint
 
 
 if __name__ == "__main__":
