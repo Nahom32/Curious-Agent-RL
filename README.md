@@ -130,7 +130,9 @@ venv/bin/python main.py
 ```
 
 The default run is substantially longer: 1,000 tabular episodes followed by
-2,000 DQN episodes, with at most 200 steps per episode.
+2,000 DQN episodes, with at most 200 steps per episode. After both agents
+finish, a coupled comparison plot is automatically generated and saved to
+`rl_comparison.png`. Pass `--no-plot` to skip this.
 
 ## Command-line options
 
@@ -146,6 +148,7 @@ The default run is substantially longer: 1,000 tabular episodes followed by
 --output-dir PATH           Place agent artifacts below a common directory
 --render                    Render training through Pygame
 --dry-run                   Resolve and print the plan without training
+--no-plot                   Skip automatic comparison plot after multi-agent runs
 ```
 
 For the complete built-in help:
@@ -237,8 +240,11 @@ runs/experiment-01/
 ```
 
 Periodic checkpoints are controlled by `training.save_interval`. Training
-progress and summary metrics are emitted to the console, and a coupled
-comparison plot can be generated from the log files after training:
+progress and summary metrics are emitted to the console.
+
+After a multi-agent pipeline (`both` or `dqn-pair`), the runner automatically
+generates a coupled comparison plot saved as `rl_comparison.png`. You can skip
+this with `--no-plot`, or generate it later from existing log files:
 
 ```bash
 venv/bin/python scripts/visualize.py \
