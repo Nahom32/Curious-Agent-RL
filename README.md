@@ -237,8 +237,14 @@ runs/experiment-01/
 ```
 
 Periodic checkpoints are controlled by `training.save_interval`. Training
-progress and summary metrics are currently emitted to the console. The YAML
-`logs` and `results` directories are reserved for expanded experiment tracking.
+progress and summary metrics are emitted to the console, and a coupled
+comparison plot can be generated from the log files after training:
+
+```bash
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files runs/experiment-01/*/logs/training.log
+```
 
 ## Standalone training scripts
 
@@ -262,7 +268,8 @@ Add `--render` to either command to open the Pygame environment.
 
 ## Visualization
 
-The visualization script currently focuses on the tabular agent:
+The visualization script provides live rendering, heatmap analysis, training
+curves, and coupled comparison plots:
 
 ```bash
 # Train and display a live tabular agent
@@ -286,12 +293,29 @@ venv/bin/python scripts/visualize.py \
   --config configs/dqn.yaml \
   --mode curves \
   --log-file training_dqn.log
+
+# Coupled comparison across multiple agents on the same axes
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files training_dqn.log training_tabular.log \
+  --label "Curious DQN" "Tabular"
+
+# Compare curious DQN against the vanilla ablation
+venv/bin/python scripts/visualize.py \
+  --mode compare \
+  --log-files logs/vanilla_dqn/training.log training_dqn.log \
+  --label "Vanilla DQN" "Curious DQN"
 ```
 
 The heatmap command looks for the checkpoint path specified in the selected
 configuration. Matplotlib modes create PNG files and open an interactive plot
 window. Training curves require the periodic episode records in the log; model
 checkpoints do not store historical episode metrics.
+
+The `compare` mode auto-detects the log format (curious-agent or vanilla DQN)
+and overlays the shared metrics — **Average Reward**, **Episode Length**, and
+**Epsilon** — plus **Curiosity Reward** for curious agents, generating a single
+coupled figure saved to `rl_comparison.png`.
 
 ## Testing
 
@@ -354,8 +378,9 @@ benchmark-ready RL framework.
   tabular agent than for DQN.
 - Zone-distribution visualization and tabular model-accuracy reporting still
   contain placeholder logic.
-- The unified runner saves checkpoints, but it does not yet aggregate repeated
-  seeds, evaluate trained policies, or generate comparison reports.
+- The unified runner saves checkpoints and log files, and a multi-agent
+  comparison plot can be produced from logs; it does not yet aggregate
+  repeated seeds or evaluate trained policies.
 
 These constraints make the project most useful for learning, prototyping, and
 extending curiosity-driven exploration experiments.
