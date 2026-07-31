@@ -118,6 +118,8 @@ def prepare_config(
 
 def selected_agents(agent_option: str) -> list[str]:
     """Expand the requested pipeline into an execution order."""
+    if agent_option == "all":
+        return ["tabular", "vanilla-dqn", "dqn"]
     if agent_option == "both":
         return ["tabular", "dqn"]
     if agent_option == "dqn-pair":
@@ -144,6 +146,13 @@ def _resolve_log_files(
     return log_files
 
 
+AGENT_LABELS: dict[str, str] = {
+    "tabular": "Tabular Q-Learning",
+    "vanilla-dqn": "Vanilla DQN",
+    "dqn": "Curious DQN",
+}
+
+
 def _generate_comparison_plot(
     agent_names: list[str],
     output_dir: Path | None,
@@ -165,7 +174,9 @@ def _generate_comparison_plot(
         return
 
     paths = [str(p) for p in log_files.values()]
-    resolved_labels = labels or list(log_files.keys())
+    resolved_labels = labels or [
+        AGENT_LABELS.get(name, name) for name in log_files
+    ]
     logger.info("Generating comparison plot from: %s", ", ".join(log_files))
     try:
         plot_comparison(paths, labels=resolved_labels)
@@ -252,11 +263,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--agent",
-        choices=("tabular", "dqn", "vanilla-dqn", "dqn-pair", "both"),
+        choices=("tabular", "dqn", "vanilla-dqn", "dqn-pair", "both", "all"),
         default="both",
         help=(
             "Experiment to run. 'dqn-pair' runs the vanilla baseline followed "
-            "by curiosity-coupled DQN."
+            "by curiosity-coupled DQN. 'all' runs all three: tabular, "
+            "vanilla DQN, and curious DQN."
         ),
     )
     parser.add_argument(

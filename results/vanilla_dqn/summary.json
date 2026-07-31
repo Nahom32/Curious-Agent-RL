@@ -1,0 +1,9 @@
+{
+  "agent": "vanilla_dqn",
+  "episodes": 2000,
+  "summary_window": 100,
+  "mean_external_return": 1.0,
+  "success_rate": 1.0,
+  "mean_positive_feedback_rate": 0.057427711810963886,
+  "mean_episode_length": 23.13
+}

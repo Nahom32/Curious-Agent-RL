@@ -103,3 +103,46 @@ def test_parse_log_file_missing_file(tmp_path: Path):
     """parse_log_file returns None when the file does not exist."""
     records = parse_log_file(str(tmp_path / "nonexistent.log"))
     assert records is None
+
+
+def test_comparison_legend_has_three_entries(tmp_path: Path, monkeypatch):
+    """A three-agent comparison plot shows one legend entry per agent."""
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    matplotlib.use("Agg")
+    import scripts.visualize as visualize
+
+    monkeypatch.setattr(plt, "show", lambda: None)
+
+    def write_log(name: str, reward: float) -> Path:
+        path = tmp_path / f"{name}.log"
+        path.write_text(
+            f"INFO - Episode 10/100: Avg Reward={reward}, "
+            f"Avg Curiosity=0.001, Avg Length=50.0, Epsilon=0.9\n"
+            f"INFO - Episode 20/100: Avg Reward={reward + 0.1}, "
+            f"Avg Curiosity=0.002, Avg Length=40.0, Epsilon=0.8\n"
+        )
+        return path
+
+    log_paths = [
+        write_log("tabular", 0.5),
+        write_log("vanilla", 0.7),
+        write_log("dqn", 0.9),
+    ]
+    labels = ["Tabular Q-Learning", "Vanilla DQN", "Curious DQN"]
+
+    visualize.plot_comparison(
+        [str(p) for p in log_paths], labels=labels
+    )
+
+    fig = plt.gcf()
+    try:
+        assert len(fig.axes) == 4
+        for ax in fig.axes:
+            legend_labels = [
+                text.get_text() for text in ax.get_legend().get_texts()
+            ]
+            assert set(legend_labels) == set(labels)
+    finally:
+        plt.close(fig)
