@@ -82,6 +82,30 @@ def test_dry_run_does_not_start_training(monkeypatch, tmp_path):
     main.run_pipeline(make_args(tmp_path, dry_run=True))
 
 
+def test_all_pipeline_runs_all_three_agents(monkeypatch, tmp_path):
+    calls = []
+
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "tabular",
+        lambda config, render: calls.append("tabular"),
+    )
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "vanilla-dqn",
+        lambda config, render: calls.append("vanilla-dqn"),
+    )
+    monkeypatch.setitem(
+        main.TRAINERS,
+        "dqn",
+        lambda config, render: calls.append("dqn"),
+    )
+
+    main.run_pipeline(make_args(tmp_path, agent="all"))
+
+    assert calls == ["tabular", "vanilla-dqn", "dqn"]
+
+
 def test_dqn_pair_runs_vanilla_before_curiosity(monkeypatch, tmp_path):
     calls = []
 
